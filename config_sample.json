@@ -1,3 +1,5 @@
 {
-    "DEBUG": true
+    "DEBUG": true,
+    "TIMEZONE": "Asia/Kolkata",
+    "PORT": 4000
 }

@@ -1,6 +1,6 @@
 //Main file for starting and controlling the Gateway Utility Functions
 
-require('dotenv').config();
+// require('dotenv').config();
 
 global.moment = require('moment');
 global._ = require('lodash');
@@ -10,17 +10,17 @@ global.fs = require('fs');
 global.path = require('path');
 global.md5 = require('md5');
 
-const express = require('express')
-const {nanoid} = import("nanoid");
+const express = require('express');
+
+const CONFIG = require('./config');
 
 global.LOADED_PLUGINS = {};
 
 console.log("\x1b[34m%s\x1b[0m","\nGateway Initialization Started @ "+moment().format(),"\n");
 
-process.env.START_TIME = moment().format();
-process.env.ROOT_PATH  = __dirname;
+CONFIG.START_TIME = moment().format();
+CONFIG.ROOT_PATH  = __dirname;
 
-const CONFIG = require('./config');
 const _PROXY = _.extend({
         "router": function(req, res, next) {
             console.log("GATEWAY DEFAULT ROUTER", req, res, next);
@@ -89,22 +89,22 @@ app.get('/', (req, res, next) => {
     return next();
   });
 
-app.listen(process.env.PORT, () => {
-    console.log("\n\x1b[34m%s\x1b[0m",`\nGateway Server Started @ `+moment().format()+` and can be accessed on http://localhost:${process.env.PORT}/`);
+app.listen(CONFIG.PORT, () => {
+    console.log("\n\x1b[34m%s\x1b[0m",`\nGateway Server Started @ `+moment().format()+` and can be accessed on http://localhost:${CONFIG.PORT}/`);
   })
 
 
 //Initialize all Endpoints and there connections
 _.each(_PROXY.endpoints, function(conf, k) {
-    console.log("MICROSERVICE_ENDPOINT", pathSlug, conf);
+    // console.log("MICROSERVICE_ENDPOINT", pathSlug, conf);
 
     var pathSlug = conf.path;
     var ENABLE_GET = true, ENABLE_POST = true, ENABLE_PUT = true, ENABLE_DELETE = true;
 
-    var basePath = `/${pathSlug}/*`;
-    if(conf.switch_type=="direct") {
-        basePath = `/${pathSlug}`;
-    }
+    var basePath = `/${pathSlug}/*?`;
+    // if(conf.switch_type=="direct") {
+    //     basePath = `/${pathSlug}/*?`;
+    // }
 
     if(conf.methods!=null) {
         ENABLE_GET = conf.methods.indexOf("GET")>=0;
@@ -114,7 +114,7 @@ _.each(_PROXY.endpoints, function(conf, k) {
     }
 
     if(ENABLE_GET) {
-        app.get(basePath, (req, res, next) => {
+        app.get(basePath, async (req, res, next) => {
             // console.log("ROUTE_GET_CONFIG", req.params, req.query, req.body, req.headers);
 
             var switch_value = false;
@@ -161,13 +161,21 @@ _.each(_PROXY.endpoints, function(conf, k) {
             
             delete req.params[0];
 
+            var reqParams = _.extend({}, req.params, req.query);
+            
+            if(conf.plugin && LOADED_PLUGINS[conf.plugin] && typeof LOADED_PLUGINS[conf.plugin]['request']=="function") {
+                reqParams = await LOADED_PLUGINS[conf.plugin]['request'](reqParams, "params", "GET");
+            }
+
             var options = {
                 method: 'GET',
                 url: target_url,
-                params: _.extend({}, req.params, req.query),
-                headers: req.headers
+                params: reqParams,
+                headers: _.extend({
+                    "x-proxy-id": generateId(10)
+                },req.headers)
             };
-            //   console.log("OOOO", options, conf, switch_value);
+            // console.log("REQUEST_FORWARDER", options, conf, switch_value, "GET");
             axios.request(options).then(function (response) {
                 // console.log("OOOO", response, options);
                 if(conf.strategy[switch_value]['post_processor']!=null && typeof conf.strategy[switch_value]['post_processor']=="function") {
@@ -203,7 +211,7 @@ _.each(_PROXY.endpoints, function(conf, k) {
     }
 
     if(ENABLE_POST) {
-        app.post(basePath, (req, res, next) => {
+        app.post(basePath, async (req, res, next) => {
             // console.log("ROUTE_POST_CONFIG", req.params, req.query, req.body, req.headers);
 
             var switch_value = false;
@@ -249,16 +257,28 @@ _.each(_PROXY.endpoints, function(conf, k) {
             
             delete req.params[0];
             req.headers['content-type'] = "application/json";
+
+            var reqParams = _.extend({}, req.params, req.query);
+            var reqBody = req.body;
+            
+            if(conf.plugin && LOADED_PLUGINS[conf.plugin] && typeof LOADED_PLUGINS[conf.plugin]['request']=="function") {
+                reqParams = await LOADED_PLUGINS[conf.plugin]['request'](reqParams, "params", "POST");
+            }
+
+            if(conf.plugin && LOADED_PLUGINS[conf.plugin] && typeof LOADED_PLUGINS[conf.plugin]['request']=="function") {
+                reqBody = await LOADED_PLUGINS[conf.plugin]['request'](reqBody, "body", "POST");
+            }
             
             var options = {
                 method: 'POST',
                 url: target_url,
-                params: _.extend({}, req.params, req.query),
-                data: req.body,
+                params: reqParams,
+                data: reqBody,
                 headers: _.extend({
+                    "x-proxy-id": generateId(10)
                 },req.headers)
             };
-            //   console.log("XXXX", options);
+            // console.log("REQUEST_FORWARDER", options, conf, switch_value, "POST");
             axios.request(options).then(function (response) {
                 //console.log("OOOO", response);
                 if(conf.strategy[switch_value]['post_processor']!=null && typeof conf.strategy[switch_value]['post_processor']=="function") {
@@ -294,7 +314,7 @@ _.each(_PROXY.endpoints, function(conf, k) {
     }
 
     if(ENABLE_PUT) {
-        app.put(basePath, (req, res, next) => {
+        app.put(basePath, async (req, res, next) => {
             // console.log("ROUTE_POST_CONFIG", req.params, req.query, req.body, req.headers);
 
             var switch_value = false;
@@ -341,14 +361,28 @@ _.each(_PROXY.endpoints, function(conf, k) {
             delete req.params[0];
             req.headers['content-type'] = "application/json";
 
+            var reqParams = _.extend({}, req.params, req.query);
+            var reqBody = req.body;
+            
+            if(conf.plugin && LOADED_PLUGINS[conf.plugin] && typeof LOADED_PLUGINS[conf.plugin]['request']=="function") {
+                reqParams = await LOADED_PLUGINS[conf.plugin]['request'](reqParams, "params", "PUT");
+            }
+
+            if(conf.plugin && LOADED_PLUGINS[conf.plugin] && typeof LOADED_PLUGINS[conf.plugin]['request']=="function") {
+                reqBody = await LOADED_PLUGINS[conf.plugin]['request'](reqBody, "body", "PUT");
+            }
+
             var options = {
                 method: 'PUT',
                 url: target_url,
-                params: _.extend({}, req.params, req.query),
-                body: req.body,
-                headers: req.headers
+                params: reqParams,
+                body: reqBody,
+                headers: _.extend({
+                    "x-proxy-id": generateId(10)
+                },req.headers)
             };
             
+            // console.log("REQUEST_FORWARDER", options, conf, switch_value, "PUT");
             axios.request(options).then(function (response) {
                 //console.log("OOOO", response);
                 if(conf.strategy[switch_value]['post_processor']!=null && typeof conf.strategy[switch_value]['post_processor']=="function") {
@@ -384,7 +418,7 @@ _.each(_PROXY.endpoints, function(conf, k) {
     }
 
     if(ENABLE_DELETE) {
-        app.delete(basePath, (req, res, next) => {
+        app.delete(basePath, async (req, res, next) => {
             // console.log("ROUTE_POST_CONFIG", req.params, req.query, req.body, req.headers);
 
             var switch_value = false;
@@ -430,14 +464,28 @@ _.each(_PROXY.endpoints, function(conf, k) {
             
             delete req.params[0];
 
+            var reqParams = _.extend({}, req.params, req.query);
+            var reqBody = req.body;
+            
+            if(conf.plugin && LOADED_PLUGINS[conf.plugin] && typeof LOADED_PLUGINS[conf.plugin]['request']=="function") {
+                reqParams = await LOADED_PLUGINS[conf.plugin]['request'](reqParams, "params", "DELETE");
+            }
+
+            if(conf.plugin && LOADED_PLUGINS[conf.plugin] && typeof LOADED_PLUGINS[conf.plugin]['request']=="function") {
+                reqBody = await LOADED_PLUGINS[conf.plugin]['request'](reqBody, "body", "DELETE");
+            }
+
             var options = {
                 method: 'DEL',
                 url: target_url,
-                params: _.extend({}, req.params, req.query),
-                body: req.body,
-                headers: req.headers
+                params: reqParams,
+                body: reqBody,
+                headers: _.extend({
+                    "x-proxy-id": generateId(10)
+                },req.headers)
             };
             
+            // console.log("REQUEST_FORWARDER", options, conf, switch_value, "DELETE");
             axios.request(options).then(function (response) {
                 //console.log("OOOO", response);
                 if(conf.strategy[switch_value]['post_processor']!=null && typeof conf.strategy[switch_value]['post_processor']=="function") {
@@ -472,3 +520,39 @@ _.each(_PROXY.endpoints, function(conf, k) {
         });
     }
 })
+
+
+function generateId(size = 10) {
+  if (!Number.isInteger(size) || size <= 0) {
+    throw new RangeError('Size must be a positive integer.');
+  }
+
+  const alphabet = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+  const alphabetLength = alphabet.length;
+
+  // Rejection sampling: we only accept bytes < mask to keep modulo unbiased.
+  const mask = 255 - (256 % alphabetLength);
+  let id = '';
+
+  // Loop until we have enough characters.
+  // Each iteration pulls a batch of random bytes and consumes from it.
+  while (id.length < size) {
+    // Batch size can be tuned; using `size` is simple and usually enough.
+    const bytes = crypto.randomBytes(size);
+
+    for (let i = 0; i < bytes.length && id.length < size; i++) {
+      const byte = bytes[i];
+
+      if (byte >= mask) {
+        // This would introduce bias, skip.
+        continue;
+      }
+
+      const index = byte % alphabetLength;
+      id += alphabet[index];
+    }
+  }
+
+  return id;
+}

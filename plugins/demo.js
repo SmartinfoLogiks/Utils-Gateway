@@ -6,10 +6,15 @@
 module.exports = {
 
     initialize: function() {
-        console.log("Demo Plugin Initialization");
+        console.log("Demo Plugin Initialized");
     },
 
-    execute: function(params, callback) {
+    request: async function(params, type = "params", method = "GET") {
+        console.log("Running Demo Task", params);
+        callback(params);
+    },
+
+    response: async function(params, type = "params", method = "GET") {
         console.log("Running Demo Task", params);
         callback(params);
     }
