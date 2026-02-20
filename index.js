@@ -9,6 +9,7 @@ global.glob = require('glob');
 global.fs = require('fs');
 global.path = require('path');
 global.md5 = require('md5');
+global.COMMONS = require('./api/commons');
 
 const express = require('express');
 
@@ -175,7 +176,7 @@ _.each(_PROXY.endpoints, function(conf, k) {
                     "x-proxy-id": generateId(10)
                 },req.headers)
             };
-            // console.log("REQUEST_FORWARDER", options, conf, switch_value, "GET");
+            _log("info", "REQUEST_FORWARDER", options, conf, switch_value, "GET");
             axios.request(options).then(function (response) {
                 // console.log("OOOO", response, options);
                 if(conf.strategy[switch_value]['post_processor']!=null && typeof conf.strategy[switch_value]['post_processor']=="function") {
@@ -278,7 +279,7 @@ _.each(_PROXY.endpoints, function(conf, k) {
                     "x-proxy-id": generateId(10)
                 },req.headers)
             };
-            // console.log("REQUEST_FORWARDER", options, conf, switch_value, "POST");
+            _log("info", "REQUEST_FORWARDER", options, conf, switch_value, "POST");
             axios.request(options).then(function (response) {
                 //console.log("OOOO", response);
                 if(conf.strategy[switch_value]['post_processor']!=null && typeof conf.strategy[switch_value]['post_processor']=="function") {
@@ -382,7 +383,7 @@ _.each(_PROXY.endpoints, function(conf, k) {
                 },req.headers)
             };
             
-            // console.log("REQUEST_FORWARDER", options, conf, switch_value, "PUT");
+            _log("info", "REQUEST_FORWARDER", options, conf, switch_value, "PUT");
             axios.request(options).then(function (response) {
                 //console.log("OOOO", response);
                 if(conf.strategy[switch_value]['post_processor']!=null && typeof conf.strategy[switch_value]['post_processor']=="function") {
@@ -485,7 +486,7 @@ _.each(_PROXY.endpoints, function(conf, k) {
                 },req.headers)
             };
             
-            // console.log("REQUEST_FORWARDER", options, conf, switch_value, "DELETE");
+            _log("info", "REQUEST_FORWARDER", options, conf, switch_value, "DELETE");
             axios.request(options).then(function (response) {
                 //console.log("OOOO", response);
                 if(conf.strategy[switch_value]['post_processor']!=null && typeof conf.strategy[switch_value]['post_processor']=="function") {
@@ -520,39 +521,3 @@ _.each(_PROXY.endpoints, function(conf, k) {
         });
     }
 })
-
-
-function generateId(size = 10) {
-  if (!Number.isInteger(size) || size <= 0) {
-    throw new RangeError('Size must be a positive integer.');
-  }
-
-  const alphabet = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
-
-  const alphabetLength = alphabet.length;
-
-  // Rejection sampling: we only accept bytes < mask to keep modulo unbiased.
-  const mask = 255 - (256 % alphabetLength);
-  let id = '';
-
-  // Loop until we have enough characters.
-  // Each iteration pulls a batch of random bytes and consumes from it.
-  while (id.length < size) {
-    // Batch size can be tuned; using `size` is simple and usually enough.
-    const bytes = crypto.randomBytes(size);
-
-    for (let i = 0; i < bytes.length && id.length < size; i++) {
-      const byte = bytes[i];
-
-      if (byte >= mask) {
-        // This would introduce bias, skip.
-        continue;
-      }
-
-      const index = byte % alphabetLength;
-      id += alphabet[index];
-    }
-  }
-
-  return id;
-}
